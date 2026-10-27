@@ -236,17 +236,17 @@ def render_card(d, width, height) -> str:
 
 
 def card_text(d) -> str:
-    return " ".join([d["quote"], " ".join(d["stats"]), " ".join(d["agents"])])
+    """卡片上唯一可能含私人信息的是模型写的金句；统计行和产品名都来自固定词表。"""
+    return d["quote"]
 
 
 def write_cards(out_dir: Path, facts, scored, narrative, private, weights=None, checks=None) -> dict:
     d = card_data(facts, scored, narrative, weights, checks)
     forbidden = list(((private or {}).get("project_names") or {}).values()) + [(private or {}).get("user", "")]
-    if not card_text_safe(card_text(d), forbidden):
+    notes = []
+    if d["quote"] and not card_text_safe(card_text(d), forbidden):
         d["quote"] = ""
-        d["stats"] = d["stats"][:2]
-        if not card_text_safe(card_text(d), forbidden):
-            return {"ok": False, "reason": "分享卡文字里出现了疑似项目名或路径，已拒绝生成"}
+        notes.append("金句里疑似有项目名、路径或用户名，已从分享卡上去掉")
     files = {}
     svgs = {}
     for name, (w, h) in {"share-card-x": (1200, 675), "share-card-xhs": (1080, 1350)}.items():
@@ -258,7 +258,7 @@ def write_cards(out_dir: Path, facts, scored, narrative, private, weights=None, 
     hp = out_dir / "share-card.html"
     hp.write_text(card_page(svgs), encoding="utf-8")
     files["html"] = str(hp)
-    return {"ok": True, "files": files}
+    return {"ok": True, "files": files, "notes": notes}
 
 
 CARD_JS = """

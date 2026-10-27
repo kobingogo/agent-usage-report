@@ -243,6 +243,8 @@ def do_render(d: Path, narrative_path=None, show_projects=False) -> dict:
     rp.write_text(html_text, encoding="utf-8")
     weights = {c["id"]: c.get("weight", 1) for c in checks["checks"]}
     cards = render.write_cards(latest, facts, scored, narrative, private, weights, checks)
+    for n in cards.get("notes") or []:
+        log("! 分享卡：" + n)
     return {"report": str(rp), "cards": cards, "issues": issues}
 
 

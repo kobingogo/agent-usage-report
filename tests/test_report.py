@@ -227,6 +227,23 @@ class TestPieces(unittest.TestCase):
         self.assertFalse(redact.card_text_safe("alpha 项目", ["alpha"]))
         self.assertTrue(redact.card_text_safe("做对 10 项"))
 
+    def test_card_not_blocked_by_product_name(self):
+        # 项目目录叫 claude / codex 时，卡片上固定的产品名不能触发拦截
+        out = Path(tempfile.mkdtemp())
+        facts = {"agents": {"claude_code": {"name": "Claude Code", "sessions": 3}}, "totals": {"sessions": 3},
+                 "meta": {"window": {"days": 30}}}
+        scored = {"total": 80, "grade": {"letter": "B", "label": "上手了"}, "sections": {"A": {"title": "上下文管理", "score": 80}},
+                  "checks": [], "counts": {"good": 1, "bad": 0, "unused": 0}}
+        priv = {"project_names": {"项目 A": "claude", "项目 B": "secret-app"}, "user": "someone"}
+        r = render.write_cards(out, facts, scored, {"card_quote": "清空上下文"}, priv)
+        self.assertTrue(r["ok"])
+        self.assertIn("Claude Code", (out / "share-card-x.svg").read_text(encoding="utf-8"))
+        r = render.write_cards(out, facts, scored, {"card_quote": "secret-app 翻车了"}, priv)
+        self.assertTrue(r["ok"])
+        self.assertNotIn("secret-app", (out / "share-card-x.svg").read_text(encoding="utf-8"))
+        self.assertTrue(r["notes"])
+        shutil.rmtree(out, ignore_errors=True)
+
     def test_classify(self):
         self.assertEqual(classify_command("npm run test -- --watch=false"), "test")
         self.assertEqual(classify_command("pnpm build"), "build")
