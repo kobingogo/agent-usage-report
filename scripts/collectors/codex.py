@@ -53,6 +53,23 @@ _PATCH_FILE = re.compile(r"\*\*\* (?:Add|Update|Delete) File: (\S+)")
 _SKILL_MENTION = re.compile(r"(?:^|\s)\$([A-Za-z0-9][\w.-]+)")
 
 
+_MY_REQUEST = re.compile(r"^## My request(?: for Codex)?:\s*$", re.MULTILINE)
+
+
+def normalize_user_text(text: str):
+    """Codex App 会把文件清单、浏览器状态等包在用户消息前面。返回 (类型, 真正的用户文字)。
+    类型：message / answer（回答 Agent 的提问）/ skip（纯注入）。"""
+    t = text.strip()
+    ms = list(_MY_REQUEST.finditer(t))
+    if ms:
+        return "message", t[ms[-1].end():].strip()
+    if t.startswith("<send_user_message_question_reply") or t.startswith("<request_user_input"):
+        return "answer", ""
+    if t.startswith(("# Files mentioned by the user", "<in-app-browser-context", "<external_codex", "<")):
+        return "skip", ""
+    return "message", t
+
+
 def _norm(t) -> str:
     return str(t or "").replace("_", "").lower()
 
@@ -273,11 +290,14 @@ class CodexCollector(Collector):
         # 选用最完整的一套
         users = users_item or users_event or [u for u in users_resp if not u[0].lstrip().startswith(_INJECTED)]
         for u, uts in users:
-            st = u.lstrip()
-            if not st or st.startswith(_INJECTED):
+            kind, real = normalize_user_text(u)
+            if kind == "answer":
+                s.ask_user += 1  # Agent 问、你在界面上答
                 continue
-            s.add_user_message(u, uts)
-            for sk in _SKILL_MENTION.findall(u):
+            if kind == "skip" or not real or real.startswith(_INJECTED):
+                continue
+            s.add_user_message(real, uts)
+            for sk in _SKILL_MENTION.findall(real):
                 s.skills[sk] += 1
         s.edits = edits_item or edits_resp
         s.code_edits = code_item if edits_item else code_resp

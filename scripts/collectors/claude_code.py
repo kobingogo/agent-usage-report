@@ -39,7 +39,8 @@ _SKIP_TYPES = ('"type":"api-request', '"type":"file-history', '"type":"atis-latc
                '"type":"custom-title', '"type":"last-prompt', '"type":"queue-operation"')
 _CMD = re.compile(r"<command-name>/?([^<\s]+)</command-name>")
 _SYNTHETIC_PREFIX = ("<task-notification", "<local-command", "Caveat:", "This session is being continued",
-                     "<system-reminder", "<bash-input", "<bash-stdout", "<bash-stderr", "<user-memory-input")
+                     "<system-reminder", "<bash-input", "<bash-stdout", "<bash-stderr", "<user-memory-input",
+                     "The app was quit while you were working")
 
 READ_TOOLS = {"Read", "Glob", "Grep", "LS", "NotebookRead"}
 EDIT_TOOLS = {"Edit", "Write", "MultiEdit", "NotebookEdit"}
