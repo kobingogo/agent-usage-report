@@ -344,11 +344,42 @@ def D3(a, p):
     return R("unused", "1 个", "会话都是一个接一个，没并行过。")
 
 
+def E1(a, p):
+    o = a.get("outcome") or {}
+    r = o.get("rework_per_100")
+    if r is None or (a["messages"]["total"] or 0) < 30:
+        return _na("消息太少")
+    trend = ""
+    f, s2 = o.get("rework_per_100_first_half"), o.get("rework_per_100_second_half")
+    if f is not None and s2 is not None:
+        trend = "前半段每 100 条 {}，后半段 {}{}".format(f, s2, "，在变好" if s2 < f else ("，在变差" if s2 > f else ""))
+    ev = ["返工最多：{}，{} 条消息里有 {} 条在指出问题".format(_sess(x), x["messages"], x["rework"])
+          for x in (a.get("evidence") or {}).get("rework_top", [])]
+    if trend:
+        ev.insert(0, trend)
+    text = "{} 条消息里有 {} 条在指出“不对 / 报错 / 还是不行”，每 100 条 {} 次".format(a["messages"]["total"], o["rework_msgs"], r)
+    if r <= p["good_per_100"]:
+        return R("good", "每百条 {} 次".format(r), text + "。", ev, rate=r)
+    return R("bad", "每百条 {} 次".format(r), text + "，返工偏多。", ev, rate=r)
+
+
+def E2(a, p):
+    o = a.get("outcome") or {}
+    n = o.get("eligible_sessions") or 0
+    if n < 5:
+        return _na("3 条消息以上的会话太少")
+    pct = o.get("clean_pct") or 0
+    text = "{} 个有来有回（3 条消息以上）的会话里，{} 个从头到尾没有返工（{}%）".format(n, o["clean_sessions"], pct)
+    if pct >= p["good_pct"]:
+        return R("good", "{}%".format(pct), text + "。", pct=pct)
+    return R("bad", "{}%".format(pct), text + "。", pct=pct)
+
+
 EVAL = {
     "A1": A1, "A2": A2, "A3": A3, "A4": A4, "A5": A5, "A6": A6,
     "B1": B1, "B2": B2, "B3": B3, "B4": B4, "B5": B5, "B6": B6, "B7": B7,
     "C1": C1, "C2": C2, "C3": C3, "C5": C5, "C6": C6, "C7": C7, "C8": C8,
-    "D1": D1, "D2": D2, "D3": D3,
+    "D1": D1, "D2": D2, "D3": D3, "E1": E1, "E2": E2,
 }
 NEEDS_AGENT = {"B4", "C2", "C6", "D1"}
 CONFIG_ONLY_OK = {"C2", "C5", "C7", "C8"}
@@ -373,6 +404,9 @@ def score(facts: dict, checks: dict) -> dict:
                 r = fn(a, p, aid) if cid in NEEDS_AGENT else fn(a, p)
                 if a["sessions"] == 0 and r["verdict"] in VERDICT_SCORE:
                     r["note"] = "仅配置体检，不计分"
+                    r["scored"] = False
+                elif chk.get("scored") is False and r["verdict"] in VERDICT_SCORE:
+                    r["note"] = "信号较弱，仅供参考，不计分"
                     r["scored"] = False
                 else:
                     r["scored"] = r["verdict"] in VERDICT_SCORE

@@ -3,12 +3,12 @@
   "sections": {
     "A": {
       "title": "上下文管理",
-      "weight": 30,
+      "weight": 25,
       "desc": "上下文是最稀缺的资源，满了就会忘事"
     },
     "B": {
       "title": "任务方法",
-      "weight": 30,
+      "weight": 25,
       "desc": "先探索、再计划、再动手，并且让 Agent 能自己验证"
     },
     "C": {
@@ -17,9 +17,14 @@
       "desc": "规则文件、Skill、MCP、权限配得合不合理"
     },
     "D": {
-      "title": "效率与成本",
+      "title": "效率",
+      "weight": 10,
+      "desc": "缓存命中；模型怎么挑只作参考"
+    },
+    "E": {
+      "title": "结果信号",
       "weight": 20,
-      "desc": "模型怎么挑、缓存命中、会不会并行"
+      "desc": "你多常需要指出“不对、报错、还是不行”——最接近“用得好不好”的信号"
     }
   },
   "verdict_labels": {
@@ -361,7 +366,8 @@
         ]
       },
       "retest": "6 字以内短消息的占比下降",
-      "problem": "提示词太短"
+      "problem": "提示词太短",
+      "scored": false
     },
     {
       "id": "B4",
@@ -400,7 +406,8 @@
         ]
       },
       "retest": "方向不对时会及时打断",
-      "problem": "跑偏不打断"
+      "problem": "跑偏不打断",
+      "scored": false
     },
     {
       "id": "B5",
@@ -441,32 +448,6 @@
       },
       "retest": "“继续”这类消息减少，或出现 /goal",
       "problem": "长任务靠手动推"
-    },
-    {
-      "id": "B6",
-      "section": "B",
-      "title": "大需求先让它采访你",
-      "weight": 0.5,
-      "applies_to": [
-        "claude_code"
-      ],
-      "params": {},
-      "basis": {
-        "claude_code": {
-          "url": "https://code.claude.com/docs/en/best-practices#let-claude-interview-you",
-          "point": "大功能先让 Claude 用 AskUserQuestion 采访你，写成 SPEC 再开新会话实现"
-        }
-      },
-      "rx": {
-        "claude_code": [
-          {
-            "kind": "prompt",
-            "text": "我想做 [一句话需求]。用 AskUserQuestion 详细采访我：技术实现、界面、边界情况、取舍。问完写成 SPEC.md。"
-          }
-        ]
-      },
-      "retest": "出现 AskUserQuestion",
-      "problem": "大需求不先对齐"
     },
     {
       "id": "B7",
@@ -898,7 +879,8 @@
         ]
       },
       "retest": "最高档模型 / 高推理强度的占比降到 75% 以下",
-      "problem": "什么活都用最贵的"
+      "problem": "什么活都用最贵的",
+      "scored": false
     },
     {
       "id": "D2",
@@ -940,42 +922,102 @@
       "problem": "缓存命中率低"
     },
     {
-      "id": "D3",
-      "section": "D",
-      "title": "会并行开工",
-      "weight": 0.5,
+      "id": "E1",
+      "section": "E",
+      "title": "返工少",
+      "weight": 1.5,
       "applies_to": [
         "claude_code",
         "codex"
       ],
-      "params": {},
+      "params": {
+        "good_per_100": 6
+      },
+      "problem": "返工偏多",
       "basis": {
         "claude_code": {
-          "url": "https://code.claude.com/docs/en/best-practices#run-multiple-claude-sessions",
-          "point": "用 worktree 或桌面 App 同时跑几个会话，写的和审的分开"
+          "url": "https://code.claude.com/docs/en/best-practices#course-correct-early-and-often",
+          "point": "纠正两次还不对，说明开头没说清；与其反复纠正，不如清空后写一个更好的开头"
         },
         "codex": {
           "url": "https://developers.openai.com/codex/learn/best-practices",
-          "point": "互不依赖的任务可以并行"
+          "point": "先说清楚目标、约束和完成标准，Codex 才知道“好”是什么样"
         }
       },
       "rx": {
         "claude_code": [
           {
-            "kind": "command",
-            "text": "claude --worktree",
-            "note": "开一个隔离的副本跑第二个任务，互不干扰"
+            "kind": "prompt",
+            "text": "开工前先用两三句话复述你理解的目标、不做什么、怎么算完成，等我确认再动手。",
+            "note": "返工最多的项目先试这一招"
+          },
+          {
+            "kind": "config",
+            "text": "# 完成标准\n- 动手前先复述目标和完成标准\n- 交付前自己跑一遍检查，贴出结果",
+            "note": "加进常用项目的 CLAUDE.md"
           }
         ],
         "codex": [
           {
             "kind": "prompt",
-            "text": "（习惯）互不依赖的任务开两个线程同时跑，各自在独立 worktree 里改。"
+            "text": "开工前先复述你理解的目标、不做什么、怎么算完成，等我确认再动手。"
+          },
+          {
+            "kind": "config",
+            "text": "## Definition of done\n- Restate the goal and success criteria before editing\n- Run the relevant checks and paste the results before finishing",
+            "note": "加进 AGENTS.md"
           }
         ]
       },
-      "retest": "出现同时进行的会话或 worktree",
-      "problem": "不会并行"
+      "retest": "每 100 条消息里的返工次数下降，后半段比前半段低",
+      "labels": {
+        "good": "表现好",
+        "bad": "偏弱"
+      }
+    },
+    {
+      "id": "E2",
+      "section": "E",
+      "title": "一次做对",
+      "weight": 1,
+      "applies_to": [
+        "claude_code",
+        "codex"
+      ],
+      "params": {
+        "good_pct": 70
+      },
+      "problem": "一次做对的会话少",
+      "basis": {
+        "claude_code": {
+          "url": "https://code.claude.com/docs/en/best-practices#provide-specific-context-in-your-prompts",
+          "point": "说清楚哪个文件、什么场景、怎么测，需要的纠正就越少"
+        },
+        "codex": {
+          "url": "https://developers.openai.com/codex/learn/best-practices",
+          "point": "把任务写得像 GitHub issue：目标、上下文、约束、完成标准"
+        }
+      },
+      "rx": {
+        "claude_code": [
+          {
+            "kind": "prompt",
+            "text": "目标：……\n相关文件：@……\n约束：……\n完成标准：……（跑哪个检查、看到什么算对）",
+            "note": "大一点的任务用这个四段式开头"
+          }
+        ],
+        "codex": [
+          {
+            "kind": "prompt",
+            "text": "目标：……\n相关文件：……\n约束：……\n完成标准：……"
+          }
+        ]
+      },
+      "retest": "没有返工的会话占比达到 70% 以上",
+      "labels": {
+        "good": "表现好",
+        "bad": "偏弱"
+      }
     }
   ],
   "features": [
@@ -1008,6 +1050,11 @@
       ]
     },
     {
+      "key": "max_parallel",
+      "label": "同时进行的会话（最多）",
+      "unit": "个"
+    },
+    {
       "key": "goal_sessions",
       "label": "/goal",
       "unit": "个会话"
@@ -1027,11 +1074,8 @@
     },
     {
       "key": "ask_user",
-      "label": "采访你（AskUserQuestion）",
-      "unit": "次",
-      "only": [
-        "claude_code"
-      ]
+      "label": "Agent 向你提问",
+      "unit": "次"
     },
     {
       "key": "worktree_sessions",

@@ -263,6 +263,7 @@ def _agent_facts(agent_id, det, main, subs, full, auto, cfg, alias, labels, proj
     top_comp = by_comp[:5]
     multi_day = [s for s in by_comp if s.start and s.end and (s.end - s.start).total_seconds() > 86400]
     unverified = sorted([s for s in edit_sessions if not s.verify_after_edit], key=lambda s: -s.user_msgs)
+    by_rework = sorted([s for s in full if s.rework_msgs], key=lambda s: (-s.rework_msgs, -s.user_msgs))
     evidence = {
         "longest": [_session_brief(s, labels) for s in by_len[:3]],
         "compaction_top": [_session_brief(s, labels) for s in top_comp],
@@ -270,6 +271,7 @@ def _agent_facts(agent_id, det, main, subs, full, auto, cfg, alias, labels, proj
         "compaction_multi_day_sessions": len(multi_day),
         "compaction_multi_day_count": sum(s.compact_auto for s in multi_day),
         "unverified_code_sessions": [_session_brief(s, labels) for s in unverified[:3]],
+        "rework_top": [dict(_session_brief(s, labels), rework=s.rework_msgs) for s in by_rework[:3]],
     }
 
     # 每天的消息数（窗口内每一天都给一个值）
@@ -279,6 +281,28 @@ def _agent_facts(agent_id, det, main, subs, full, auto, cfg, alias, labels, proj
     while d <= end:
         series.append(days.get(d.isoformat(), 0))
         d = d.fromordinal(d.toordinal() + 1)
+
+    # 结果信号：返工（用户指出“不对 / 报错 / 还是不行”）
+    rework_total = sum(s.rework_msgs for s in full)
+    eligible = [s for s in full if s.user_msgs >= 3]
+    rd = Counter()
+    for s in full:
+        rd.update(s.rework_days)
+    mid = since.astimezone().date().fromordinal(since.astimezone().date().toordinal() + (until - since).days // 2).isoformat()
+    first_msgs = sum(v for k, v in days.items() if k < mid)
+    second_msgs = sum(v for k, v in days.items() if k >= mid)
+    first_rw = sum(v for k, v in rd.items() if k < mid)
+    second_rw = sum(v for k, v in rd.items() if k >= mid)
+    outcome = {
+        "rework_msgs": rework_total,
+        "rework_per_100": round(100.0 * rework_total / user_msgs, 1) if user_msgs else None,
+        "eligible_sessions": len(eligible),
+        "clean_sessions": sum(1 for s in eligible if s.rework_msgs == 0),
+        "clean_pct": _pct(sum(1 for s in eligible if s.rework_msgs == 0), len(eligible)),
+        "rework_per_100_first_half": round(100.0 * first_rw / first_msgs, 1) if first_msgs else None,
+        "rework_per_100_second_half": round(100.0 * second_rw / second_msgs, 1) if second_msgs else None,
+        "half_split_date": mid,
+    }
 
     behavior = {
         "clear": slash.get("clear", 0) + slash.get("new", 0),
@@ -335,6 +359,7 @@ def _agent_facts(agent_id, det, main, subs, full, auto, cfg, alias, labels, proj
             "per_session_max": max(msgs_per_session) if msgs_per_session else 0,
         },
         "behavior": behavior,
+        "outcome": outcome,
         "evidence": evidence,
         "daily_messages": series,
         "hourly_messages": [hours.get(h, 0) for h in range(24)],

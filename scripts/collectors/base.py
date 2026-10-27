@@ -20,11 +20,38 @@ from typing import Iterator, Optional
 
 SHORT_MSG_CHARS = 6  # “可以”“继续”这类短消息的上限
 
-_NEG_START = re.compile(
-    r"^\s*(不对|不是|还是不|还是没|错了|又错|没有用|不行|不起作用|没生效|没变化|仍然|依然|"
-    r"no\b|nope|wrong|still\b|that'?s not|doesn'?t work|not working)",
+# 返工信号：用户在指出“结果不对”。只看消息前 40 个字，先排除正面说法。
+_REWORK_POS = re.compile(r"(没问题|没毛病|太棒|太好了|不错|很好|完美|搞定了|可以了|我(说|发|写|打)错|发错了|works now|looks good|perfect)", re.IGNORECASE)
+_REWORK = re.compile(
+    r"(不对|不行|不是这样|错了|有问题|有bug|报错|出错|失败|没生效|不生效|没反应|没变化|没效果|不起作用|跑不起来|打不开|"
+    r"不满意|不太(行|好|对|合适|像|自然)|不够|太差|质量差|不好看|难看|简陋|空白|没有.{0,10}(感觉|效果)了|太(素|单调|糊|暗|亮|慢|丑|乱|假|生硬|突兀|夸张|简陋)|有点(糊|粗糙|怪|奇怪|假|乱|丑|生硬|问题)|"
+    r"还有(问题|bug|瑕疵)|漏了|缺了|少了|没(动|飘|生成|出来|加上|改)|你是不是(选错|搞错|弄错|漏|忘)|搞错|弄错|"
+    r"重做|重来|回滚|改回|撤销|退回|"
+    r"看不到|显示不了|没显示|白屏|黑屏|崩了|卡住|卡着|一直在|还是没|还是不|还是有|还是报|还是一样|还是老样子|(依然|仍然)(不|没|有问题|报错|失败)|"
+    r"又出现|又报|又坏|怎么还|怎么又|^为什么.{0,12}(不|没|还|这么|那么|卡|慢|会)|不是.{0,16}(而是|我要|我想要|我说的)|"
+    r"\bstill (not|broken|fail|wrong|the same)|doesn'?t work|not working|\bwrong\b|\bbroken\b|\bfailed\b|"
+    r"why (is|does|did|isn'?t|doesn'?t|didn'?t)\b.{0,20}\bnot\b)",
     re.IGNORECASE,
 )
+
+
+_REWORK_STRONG = re.compile(r"(报错|失败|不对|不行|还是不|还是没|还是有|白屏|黑屏|崩了)")
+_CONDITIONAL = re.compile(r"(如果|若是|是否|有没有|会不会|能否|能不能|万一)")
+
+
+def is_rework(text: str) -> bool:
+    """近似识别“用户在指出结果不对”。在作者数据上抽样，准确率约八成；只用于看比例和趋势。"""
+    head = text.strip()[:40]
+    if _REWORK_POS.search(head):
+        return False
+    if not _REWORK.search(head):
+        return False
+    # “如果觉得不够……”“是否可以……”这类条件句和提问，除非带强信号，否则不算
+    if _CONDITIONAL.search(head) and not _REWORK_STRONG.search(head):
+        return False
+    return True
+
+
 _FILE_REF = re.compile(
     r"(@[\w./-]+|[\w一-鿿-]+\.(py|ts|tsx|js|jsx|mjs|md|json|html|css|scss|go|rs|java|swift|kt|"
     r"ya?ml|toml|sh|vue|svelte|rb|php|c|cc|cpp|h|sql|txt|csv)\b|(?:^|\s)(?:\.{0,2}/|~/)[\w.-]+/)",
@@ -50,7 +77,7 @@ def classify_message(text: str) -> dict:
     return {
         "chars": len(t),
         "short": len(t) <= SHORT_MSG_CHARS,
-        "neg": bool(_NEG_START.search(t)),
+        "neg": is_rework(t),
         "file_ref": bool(_FILE_REF.search(t)),
     }
 
@@ -117,6 +144,8 @@ class SessionStats:
     msg_hours: Counter = field(default_factory=Counter)    # 本地小时 → 消息数
     file_ref_msgs: int = 0
     max_neg_run: int = 0
+    rework_msgs: int = 0
+    rework_days: Counter = field(default_factory=Counter)
     neg_loops: int = 0  # 连续 ≥3 条否定开头的消息出现的次数
     _neg_run: int = 0
 
@@ -168,6 +197,9 @@ class SessionStats:
         if c["file_ref"]:
             self.file_ref_msgs += 1
         if c["neg"]:
+            self.rework_msgs += 1
+            if ts is not None:
+                self.rework_days[ts.astimezone().date().isoformat()] += 1
             self._neg_run += 1
             if self._neg_run == 3:
                 self.neg_loops += 1
