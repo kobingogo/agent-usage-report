@@ -118,7 +118,7 @@ python3 -m unittest discover -s tests -v
 试吃版提示词要下载固定版本并核对哈希。打 tag 之后：
 
 ```bash
-curl -fsSL -o aur.tar.gz https://github.com/kobingogo/agent-usage-report/archive/refs/tags/v0.1.0-beta.tar.gz
+curl -fsSL -o aur.tar.gz https://github.com/kobingogo/agent-usage-report/archive/refs/tags/v0.1.1-beta.tar.gz
 shasum -a 256 aur.tar.gz
 ```
 
