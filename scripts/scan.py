@@ -231,8 +231,10 @@ def do_render(d: Path, narrative_path=None, show_projects=False) -> dict:
         if not isinstance(user_n, dict):
             raise SystemExit("narrative.json 读不了，确认是合法的 JSON 对象")
         # 只认模型能看到的 findings.json 里的数字；facts 里成千上万的 token 数会让编造的数字碰巧“对上”
-        allowed = render.allowed_numbers(read_json(latest / "findings.json") or {}, facts["totals"], facts["meta"]["window"])
-        issues = render.check_narrative(user_n, allowed)
+        fj = read_json(latest / "findings.json") or {}
+        allowed = render.allowed_numbers(fj, facts["totals"], facts["meta"]["window"])
+        per_check = {c["id"]: c.get("agents") for c in fj.get("checks") or []}
+        issues = render.check_narrative(user_n, allowed, per_check)
         narrative.update({k: v for k, v in user_n.items() if v})
         if Path(narrative_path).resolve() != (latest / "narrative.json").resolve():
             write_json(latest / "narrative.json", user_n)

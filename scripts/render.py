@@ -27,7 +27,7 @@ LEVEL_TEXT = {"full": "逐条分析", "session": "会话级", "config": "仅配�
 _NUM = re.compile(r"\d+(?:\.\d+)?")
 
 
-def allowed_numbers(*objs) -> set:
+def allowed_numbers(*objs, small_ints=True) -> set:
     nums = set()
     for o in objs:
         for m in _NUM.findall(json.dumps(o, ensure_ascii=False)):
@@ -38,7 +38,8 @@ def allowed_numbers(*objs) -> set:
                 nums.add(("%.1f" % f).rstrip("0").rstrip("."))
             except ValueError:
                 pass
-    nums |= {str(i) for i in range(0, 11)}
+    if small_ints:  # 总评里“三件事”“第 1 条”这类小数字放行；单项改写不放行
+        nums |= {str(i) for i in range(0, 11)}
     return nums
 
 
@@ -50,13 +51,17 @@ def unverified_numbers(text: str, allowed: set) -> list:
     return bad
 
 
-def check_narrative(narr: dict, allowed: set) -> dict:
-    """返回 {字段路径: [对不上的数字]}。"""
+def check_narrative(narr: dict, allowed: set, per_check: dict = None) -> dict:
+    """返回 {字段路径: [对不上的数字]}。
+    改写某一项检查的发现句（findings.<ID>）时，只能用这一项自己的数字，防止张冠李戴。"""
     issues = {}
+    per_check = per_check or {}
 
     def walk(v, path):
         if isinstance(v, str):
-            b = unverified_numbers(v, allowed)
+            cid = path.split(".")[-1] if path.startswith("narrative.findings.") else None
+            pool = allowed_numbers(per_check[cid], small_ints=False) if cid in per_check else allowed
+            b = unverified_numbers(v, pool)
             if b:
                 issues[path] = b
         elif isinstance(v, dict):
@@ -222,7 +227,7 @@ def render_card(d, width, height) -> str:
     y = top + (20 if width > height else 0)
     for label, score in d["sections"]:
         parts.append(_bar(body_x, y, bw, label, score))
-        y += 62
+        y += 56
     y += 10
     for s in d["stats"]:
         parts.append('<text x="{}" y="{}" class="t2">· {}</text>'.format(body_x, y, E(s)))

@@ -420,9 +420,10 @@ def render_report(facts, scored, checks, narrative, diff, issues, show_projects=
                         cells.append('<td class="muted">·</td>')
                         continue
                     cells.append('<td><span class="cell" data-tip="{}">{}<span class="val">{}</span></span></td>'.format(
-                        E(x["finding"]), pill(x["verdict"]), E(x["value"])))
-            o.append('<tr><td class="t"><span class="id">{}</span><a href="#chk-{}">{}</a></td>{}</tr>'.format(
-                r["id"], r["id"], E(r["title"]), "".join(cells)))
+                        E(x["finding"]), pill(x["verdict"], _lab(chk_meta[r["id"]], x["verdict"])), E(x["value"])))
+            ref = ' <span class="small muted" title="信号较弱，只展示不计分">参考</span>' if chk_meta[r["id"]].get("scored") is False else ""
+            o.append('<tr><td class="t"><span class="id">{}</span><a href="#chk-{}">{}</a>{}</td>{}</tr>'.format(
+                r["id"], r["id"], E(r["title"]), ref, "".join(cells)))
     o.append("</tbody></table></div></section>")
 
     # ---------- 使用画像
@@ -461,7 +462,7 @@ def render_report(facts, scored, checks, narrative, diff, issues, show_projects=
 
     # ---------- 详细诊断
     o.append('<section id="detail"><div class="sec-h"><h2>详细诊断</h2><p>先看要改的，做对了的折叠在后面</p></div>')
-    order = [("bad", "用错了"), ("unused", "没用上")]
+    order = [("bad", "用错了 / 偏弱"), ("unused", "没用上")]
     for verdict, title in order:
         rs = [r for r in scored["checks"] if r["overall"] == verdict]
         if not rs:
@@ -568,7 +569,7 @@ def render_report(facts, scored, checks, narrative, diff, issues, show_projects=
 def _card(r, cm, sections, narrative, issues):
     v = r["overall"]
     parts = ['<article class="panel card c-{}" id="chk-{}"><header>{}<h3><span class="id">{}</span>{}</h3><span class="tag">{}</span></header>'.format(
-        v, r["id"], pill(v), r["id"], E(r["title"]), E(sections[r["section"]]["title"]))]
+        v, r["id"], pill(v, _lab(cm, v)), r["id"], E(r["title"]), E(sections[r["section"]]["title"]))]
     rank = {"bad": 0, "unused": 1, "info": 2, "good": 3, "na": 4}
     for aid, x in sorted(r["per_agent"].items(), key=lambda kv: rank.get(kv[1]["verdict"], 5)):
         ftxt = (narrative.get("findings") or {}).get(r["id"]) if len(r["per_agent"]) == 1 else None
@@ -576,7 +577,7 @@ def _card(r, cm, sections, narrative, issues):
         ev = "".join("<li>{}</li>".format(E(e)) for e in x.get("evidence") or [])
         note = '<div class="small muted">{}</div>'.format(E(x["note"])) if x.get("note") else ""
         parts.append('<div class="ag"><div class="who">{}{} {}</div><div class="big">{}</div><p>{}</p>{}{}</div>'.format(
-            dot(aid), E(AGENT_NAMES.get(aid, aid)), pill(x["verdict"]) if len(r["per_agent"]) > 1 else "",
+            dot(aid), E(AGENT_NAMES.get(aid, aid)), pill(x["verdict"], _lab(cm, x["verdict"])) if len(r["per_agent"]) > 1 else "",
             E(x["value"]), body, '<ul class="ev">{}</ul>'.format(ev) if ev else "", note))
     bas = []
     for aid in r["per_agent"]:
@@ -597,6 +598,11 @@ def _card(r, cm, sections, narrative, issues):
                 " open" if v == "bad" else "", "".join(blocks), E(cm.get("retest", ""))))
     parts.append("</article>")
     return "".join(parts)
+
+
+def _lab(cm, verdict):
+    """结果类检查（E 区）用“表现好 / 偏弱”，不说“做对了 / 用错了”。"""
+    return (cm.get("labels") or {}).get(verdict)
 
 
 def _perm_text(c, a):
