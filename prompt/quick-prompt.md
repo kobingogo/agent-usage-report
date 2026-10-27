@@ -4,7 +4,7 @@
 > 它会下载**固定版本**的统计脚本，并核对哈希，不让 Agent 现编统计逻辑。这样每个人数出来的数字口径一致。
 > 想长期用、要复测对比，请安装 Skill（见 README）。
 
-下面的地址和哈希固定在 v0.1.1-beta 这个版本上。以后发新版时，维护者按 README「发布」一节重新计算并替换。
+下面的地址和哈希固定在 v0.1.2-beta 这个版本上。以后发新版时，维护者按 README「发布」一节重新计算并替换。
 
 ---
 
@@ -15,8 +15,8 @@
 
 2. 下载固定版本的体检脚本并核对哈希：
    mkdir -p ~/.agent-usage-report/tool && cd ~/.agent-usage-report/tool
-   curl -fsSL -o aur.tar.gz https://github.com/kobingogo/agent-usage-report/archive/refs/tags/v0.1.1-beta.tar.gz
-   核对 sha256 必须等于 f2b8111b8a3b9b24ff461f54c9e1a3087f9b3283e8bc27fc84be97f2fbd8f6d2（macOS 用 shasum -a 256 aur.tar.gz，Linux 用 sha256sum aur.tar.gz）。
+   curl -fsSL -o aur.tar.gz https://github.com/kobingogo/agent-usage-report/archive/refs/tags/v0.1.2-beta.tar.gz
+   核对 sha256 必须等于 13053da3a3e727ebdd07dff3453fc4ea5600c5f14c71fb62dc16fddd9a7d07d0（macOS 用 shasum -a 256 aur.tar.gz，Linux 用 sha256sum aur.tar.gz）。
    不一致就删掉文件、告诉我、停下。一致就解压：tar -xzf aur.tar.gz --strip-components=1
 
 3. 运行统计（只读本机记录，不联网，不改配置）：
