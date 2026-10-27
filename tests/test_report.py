@@ -78,6 +78,7 @@ class TestClaudeCode(Base):
         s = self.main["22222222-bbbb"]
         self.assertEqual(s.user_msgs, 4)  # 60 天前那条在窗口外
         self.assertEqual(s.neg_loops, 1)
+        self.assertEqual(s.rework_msgs, 3)
         self.assertEqual(s.modes["bypassPermissions"], 4)
         self.assertEqual(s.code_edits, 0)  # 只改了 .md
 
@@ -113,7 +114,10 @@ class TestCodex(Base):
 
     def test_new_format(self):
         s = self.main["cx-new"]
-        self.assertEqual(s.user_msgs, 1)  # 注入的 AGENTS.md 不算
+        # 注入的 AGENTS.md、浏览器状态不算；文件清单只取 “## My request:” 之后；界面回答记为向你提问
+        self.assertEqual(s.user_msgs, 2)
+        self.assertEqual(s.rework_msgs, 1)  # “页面还是白屏”
+        self.assertEqual(s.ask_user, 1)
         self.assertEqual(s.skills["playwright"], 2)  # $提及 + 读 SKILL.md
         self.assertEqual(s.edits, 2)
         self.assertEqual(s.code_edits, 1)
@@ -189,6 +193,14 @@ class TestEndToEnd(Base):
         html_text = (latest / "report.html").read_text(encoding="utf-8")
         for anchor in ('id="sheet"', 'id="profile"', 'id="detail"', 'id="todo"', 'data-tip='):
             self.assertIn(anchor, html_text)
+        ids = [c["id"] for c in findings["checks"]]
+        self.assertNotIn("B6", ids)
+        self.assertIn("E1", ids)
+        b3 = next(c for c in findings["checks"] if c["id"] == "B3")
+        scored_json = json.loads((latest / "scored.json").read_text(encoding="utf-8"))
+        b3s = next(c for c in scored_json["checks"] if c["id"] == "B3")
+        self.assertTrue(all(not x.get("scored") for x in b3s["per_agent"].values()))  # 弱信号不计分
+        self.assertIn("E", scored_json["sections"])
         c8 = next(c for c in findings["checks"] if c["id"] == "C8")
         self.assertEqual(c8["agents"]["claude_code"]["verdict"], "bad")
 
@@ -244,6 +256,15 @@ class TestPieces(unittest.TestCase):
         self.assertTrue(r["notes"])
         shutil.rmtree(out, ignore_errors=True)
 
+    def test_rework_detector(self):
+        from collectors.base import is_rework
+        for t in ("还是报错", "这个也不行，按钮还是太小", "效果还是不太行，图标有点糊", "你是不是选错了文件",
+                  "为什么卡着这么慢", "still broken after the fix", "部署失败了"):
+            self.assertTrue(is_rework(t), t)
+        for t in ("没问题，继续", "太棒了！", "我说错了，应该是周三", "如果觉得不够你及时反馈",
+                  "是否可以进入发布阶段", "帮我写一个登录页", "continue"):
+            self.assertFalse(is_rework(t), t)
+
     def test_classify(self):
         self.assertEqual(classify_command("npm run test -- --watch=false"), "test")
         self.assertEqual(classify_command("pnpm build"), "build")
@@ -264,6 +285,12 @@ class TestPieces(unittest.TestCase):
         allowed = render.allowed_numbers({"a": 98.3, "b": 47})
         self.assertEqual(render.unverified_numbers("命中 98.3%，47 个，3 件事", allowed), [])
         self.assertEqual(render.unverified_numbers("命中 99%", allowed), ["99"])
+
+    def test_numbers_per_check(self):
+        per = {"A3": {"claude_code": {"value": "0 次", "finding": "被自动压缩 5 次"}}}
+        allowed = render.allowed_numbers({"other": 4, "x": 5})
+        self.assertEqual(render.check_narrative({"findings": {"A3": "压缩了 4 次"}}, allowed, per), {"narrative.findings.A3": ["4"]})
+        self.assertEqual(render.check_narrative({"findings": {"A3": "压缩了 5 次"}}, allowed, per), {})
 
     def test_diff(self):
         prev = {"generated_at": "x", "total": 60, "sections": {"A": 50}, "checks": {"A1": "bad", "B1": "good"}}

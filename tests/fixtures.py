@@ -148,6 +148,10 @@ def build_home(root: Path, with_zst: bool = True) -> dict:
         ev(499, "turn_context", tc),
         ev(499, "response_item", {"type": "message", "role": "user", "content": [{"type": "input_text", "text": "# AGENTS.md instructions"}]}),
         item(499, {"type": "UserMessage", "content": [{"type": "text", "text": "用 $playwright 检查一下页面 src/page.tsx"}]}),
+        # App 注入：文件清单 + 真实请求、内置浏览器状态、对提问的界面回答
+        item(499, {"type": "UserMessage", "content": [{"type": "text", "text": "# Files mentioned by the user:\n\n## a.png: /x/a.png\n\n## My request:\n页面还是白屏"}]}),
+        item(499, {"type": "UserMessage", "content": [{"type": "text", "text": "<in-app-browser-context source=\"ambient-ui-state\">\n# In app browser:\n</in-app-browser-context>"}]}),
+        item(499, {"type": "UserMessage", "content": [{"type": "text", "text": "<send_user_message_question_reply>\n[{\"answer\":\"A\"}]\n</send_user_message_question_reply>"}]}),
         item(498, {"type": "FileChange", "changes": {a + "/src/page.tsx": {"type": "update"}, a + "/notes.md": {"type": "add"}}}),
         item(497, {"type": "CommandExecution", "command": ["bash", "-lc", "pnpm run build"], "parsed_cmd": []}),
         item(496, {"type": "CommandExecution", "command": ["bash", "-lc", "cat ~/.agents/skills/playwright/SKILL.md"],
