@@ -1,0 +1,1052 @@
+{
+  "version": 1,
+  "sections": {
+    "A": {
+      "title": "上下文管理",
+      "weight": 30,
+      "desc": "上下文是最稀缺的资源，满了就会忘事"
+    },
+    "B": {
+      "title": "任务方法",
+      "weight": 30,
+      "desc": "先探索、再计划、再动手，并且让 Agent 能自己验证"
+    },
+    "C": {
+      "title": "配置卫生",
+      "weight": 20,
+      "desc": "规则文件、Skill、MCP、权限配得合不合理"
+    },
+    "D": {
+      "title": "效率与成本",
+      "weight": 20,
+      "desc": "模型怎么挑、缓存命中、会不会并行"
+    }
+  },
+  "verdict_labels": {
+    "good": "做对了",
+    "bad": "用错了",
+    "unused": "没用上",
+    "na": "数据不足",
+    "info": "仅供参考"
+  },
+  "checks": [
+    {
+      "id": "A1",
+      "section": "A",
+      "title": "换任务就清空上下文",
+      "weight": 1,
+      "applies_to": [
+        "claude_code",
+        "codex"
+      ],
+      "params": {
+        "long_session_msgs": 40,
+        "long_share_bad": 0.1,
+        "p90_good": 20
+      },
+      "basis": {
+        "claude_code": {
+          "url": "https://code.claude.com/docs/en/best-practices#manage-context-aggressively",
+          "point": "不相关的任务之间用 /clear 清空上下文；长会话里的无关内容会拖累表现"
+        },
+        "codex": {
+          "url": "https://developers.openai.com/codex/learn/best-practices",
+          "point": "一个线程只做一件事，换任务开新线程"
+        }
+      },
+      "rx": {
+        "claude_code": [
+          {
+            "kind": "command",
+            "text": "/clear",
+            "note": "换一件不相关的事之前先打一下；想留着以后回来，先 /rename 起个名字"
+          },
+          {
+            "kind": "prompt",
+            "text": "把这次的结论、改过的文件和下一步写进 HANDOFF.md，写完告诉我，我会 /clear 开新会话。"
+          }
+        ],
+        "codex": [
+          {
+            "kind": "command",
+            "text": "/new",
+            "note": "换任务时开新线程，旧线程用 codex resume 随时回来"
+          },
+          {
+            "kind": "prompt",
+            "text": "把这次的结论、改过的文件和下一步写进 HANDOFF.md，我接下来会开新线程继续。"
+          }
+        ]
+      },
+      "retest": "超过 40 条消息的长会话占比降到 10% 以下，或者出现 /clear",
+      "problem": "会话太长不清空"
+    },
+    {
+      "id": "A2",
+      "section": "A",
+      "title": "很少被自动压缩",
+      "weight": 1,
+      "applies_to": [
+        "claude_code",
+        "codex"
+      ],
+      "params": {
+        "per10_good": 2
+      },
+      "basis": {
+        "claude_code": {
+          "url": "https://code.claude.com/docs/en/best-practices#avoid-common-failure-patterns",
+          "point": "自动压缩说明上下文快满了；“大杂烩会话”是常见失败模式"
+        },
+        "codex": {
+          "url": "https://developers.openai.com/codex/learn/best-practices",
+          "point": "长任务拆成小步，把计划写进文件而不是一直堆在对话里"
+        }
+      },
+      "rx": {
+        "claude_code": [
+          {
+            "kind": "prompt",
+            "text": "用子代理去调研 X，只把结论和关键文件路径汇报给我，不要把读到的原文贴回来。"
+          },
+          {
+            "kind": "config",
+            "text": "# Compact instructions\n压缩时保留：改过的文件清单、测试命令、未完成的待办。",
+            "note": "加在 CLAUDE.md 末尾"
+          }
+        ],
+        "codex": [
+          {
+            "kind": "command",
+            "text": "/new",
+            "note": "别让一个线程挂好几天；第二天继续时开新线程，把 PLAN.md 发给它"
+          },
+          {
+            "kind": "prompt",
+            "text": "先把计划写进 PLAN.md，每完成一步就更新它；上下文快满时我会开新线程，从 PLAN.md 接着做。"
+          }
+        ]
+      },
+      "retest": "每 10 个会话的自动压缩次数降到 2 次以内",
+      "problem": "上下文常被撑满"
+    },
+    {
+      "id": "A3",
+      "section": "A",
+      "title": "主动压缩并说明保留什么",
+      "weight": 0.5,
+      "applies_to": [
+        "claude_code"
+      ],
+      "params": {},
+      "basis": {
+        "claude_code": {
+          "url": "https://code.claude.com/docs/en/best-practices#manage-context-aggressively",
+          "point": "/compact 后面写清楚要保留什么，比等自动压缩更可控"
+        }
+      },
+      "rx": {
+        "claude_code": [
+          {
+            "kind": "command",
+            "text": "/compact 保留 API 改动和测试命令，其余可以丢",
+            "note": "在会话变长、但还想继续这件事时用"
+          }
+        ]
+      },
+      "retest": "出现带说明的 /compact",
+      "problem": "从不主动压缩"
+    },
+    {
+      "id": "A4",
+      "section": "A",
+      "title": "纠错别超过两次",
+      "weight": 1,
+      "applies_to": [
+        "claude_code",
+        "codex"
+      ],
+      "params": {
+        "bad_share": 0.1
+      },
+      "basis": {
+        "claude_code": {
+          "url": "https://code.claude.com/docs/en/best-practices#course-correct-early-and-often",
+          "point": "同一个问题纠正两次还不对，就清空重来，写一个更好的开头"
+        },
+        "codex": {
+          "url": "https://developers.openai.com/codex/learn/best-practices",
+          "point": "结果不对时回到计划和提示词本身，而不是一句句追着改"
+        }
+      },
+      "rx": {
+        "claude_code": [
+          {
+            "kind": "prompt",
+            "text": "停一下。总结我们试过哪些办法、为什么没用，写成一段新的任务说明给我。",
+            "note": "拿到说明后 /clear，把它作为新会话的第一条消息"
+          }
+        ],
+        "codex": [
+          {
+            "kind": "prompt",
+            "text": "停一下。总结试过哪些办法、为什么没用，写成一段新的任务说明，我会开新线程重来。"
+          }
+        ]
+      },
+      "retest": "出现连续三次纠错的会话占比降到 10% 以下",
+      "problem": "反复纠错"
+    },
+    {
+      "id": "A5",
+      "section": "A",
+      "title": "调研交给子代理",
+      "weight": 1,
+      "applies_to": [
+        "claude_code",
+        "codex"
+      ],
+      "params": {},
+      "basis": {
+        "claude_code": {
+          "url": "https://code.claude.com/docs/en/best-practices#use-subagents-for-investigation",
+          "point": "让子代理在自己的上下文里调研，只把总结带回主会话"
+        },
+        "codex": {
+          "url": "https://developers.openai.com/codex/learn/best-practices",
+          "point": "大任务可以拆给多个代理并行处理"
+        }
+      },
+      "rx": {
+        "claude_code": [
+          {
+            "kind": "prompt",
+            "text": "用子代理调研：X 是怎么实现的、有哪些现成的工具函数可以复用。只回报结论和文件路径。"
+          }
+        ],
+        "codex": [
+          {
+            "kind": "prompt",
+            "text": "开一个子代理去调研 X，只把结论和关键文件告诉我，主线程继续做 Y。"
+          }
+        ]
+      },
+      "retest": "子代理调用次数大于 0",
+      "problem": "调研不用子代理"
+    },
+    {
+      "id": "B1",
+      "section": "B",
+      "title": "大改动先进 Plan 模式",
+      "weight": 1,
+      "applies_to": [
+        "claude_code",
+        "codex"
+      ],
+      "params": {},
+      "basis": {
+        "claude_code": {
+          "url": "https://code.claude.com/docs/en/best-practices#explore-first-then-plan-then-code",
+          "point": "先探索、再计划、再写代码；改多个文件或不熟悉的代码时最有用"
+        },
+        "codex": {
+          "url": "https://developers.openai.com/codex/learn/best-practices",
+          "point": "复杂、多步骤的任务跳过计划是常见错误"
+        }
+      },
+      "rx": {
+        "claude_code": [
+          {
+            "kind": "action",
+            "text": "Shift+Tab",
+            "note": "按到状态栏显示 plan mode；或者输入 /plan"
+          },
+          {
+            "kind": "prompt",
+            "text": "先别改代码。读一下相关文件，告诉我要改哪些文件、怎么改、有什么风险，等我确认。"
+          }
+        ],
+        "codex": [
+          {
+            "kind": "command",
+            "text": "/plan",
+            "note": "切到 Plan 模式，确认计划后再执行"
+          }
+        ]
+      },
+      "retest": "改过代码的会话里出现 Plan 模式",
+      "problem": "大改动不先计划"
+    },
+    {
+      "id": "B2",
+      "section": "B",
+      "title": "让 Agent 自己验证",
+      "weight": 1.5,
+      "applies_to": [
+        "claude_code",
+        "codex"
+      ],
+      "params": {
+        "good_pct": 50
+      },
+      "basis": {
+        "claude_code": {
+          "url": "https://code.claude.com/docs/en/best-practices#give-claude-a-way-to-verify-its-work",
+          "point": "给它一个能跑的检查：测试、构建、截图对比；没有检查你就成了验证环节"
+        },
+        "codex": {
+          "url": "https://developers.openai.com/codex/learn/best-practices",
+          "point": "让它写测试、跑检查、确认结果；前提是它知道“好”是什么样"
+        }
+      },
+      "rx": {
+        "claude_code": [
+          {
+            "kind": "prompt",
+            "text": "改完后跑测试（或构建、截图对比），把命令和结果贴给我；没通过就继续修，直到通过。"
+          },
+          {
+            "kind": "config",
+            "text": "# 完成标准\n- 改完代码必须跑 npm test 和 npm run build，贴出结果\n- 界面改动要截图对比",
+            "note": "加进项目的 CLAUDE.md，命令换成你项目的"
+          }
+        ],
+        "codex": [
+          {
+            "kind": "config",
+            "text": "## Definition of done\n- 改完必须跑 npm test 和 npm run build 并贴出结果",
+            "note": "加进 AGENTS.md，命令换成你项目的"
+          }
+        ]
+      },
+      "retest": "改过代码的会话里，跑过测试 / 构建 / lint / 浏览器检查的比例达到 50% 以上",
+      "problem": "改完不验证"
+    },
+    {
+      "id": "B3",
+      "section": "B",
+      "title": "提示词具体",
+      "weight": 1,
+      "applies_to": [
+        "claude_code",
+        "codex"
+      ],
+      "params": {
+        "short_pct_bad": 25,
+        "median_chars_bad": 12
+      },
+      "basis": {
+        "claude_code": {
+          "url": "https://code.claude.com/docs/en/best-practices#provide-specific-context-in-your-prompts",
+          "point": "说清楚哪个文件、什么场景、怎么测；用 @ 引用文件"
+        },
+        "codex": {
+          "url": "https://developers.openai.com/codex/learn/best-practices",
+          "point": "像写 GitHub issue 一样写提示词：目标、上下文、约束、完成标准"
+        }
+      },
+      "rx": {
+        "claude_code": [
+          {
+            "kind": "prompt",
+            "text": "目标：……\n相关文件：@src/xxx\n约束：不要引入新依赖\n完成标准：……测试通过",
+            "note": "长任务用这个四段式开头"
+          }
+        ],
+        "codex": [
+          {
+            "kind": "prompt",
+            "text": "目标：……\n相关文件：……\n约束：……\n完成标准：……"
+          }
+        ]
+      },
+      "retest": "6 字以内短消息的占比下降",
+      "problem": "提示词太短"
+    },
+    {
+      "id": "B4",
+      "section": "B",
+      "title": "跑偏就打断",
+      "weight": 0.5,
+      "applies_to": [
+        "claude_code",
+        "codex"
+      ],
+      "params": {},
+      "basis": {
+        "claude_code": {
+          "url": "https://code.claude.com/docs/en/best-practices#rewind-with-checkpoints",
+          "point": "发现方向不对立刻按 Esc；连按两次 Esc 或 /rewind 可以回到之前的检查点"
+        },
+        "codex": {
+          "url": "https://developers.openai.com/codex/learn/best-practices",
+          "point": "发现方向不对尽早打断"
+        }
+      },
+      "rx": {
+        "claude_code": [
+          {
+            "kind": "command",
+            "text": "/rewind",
+            "note": "或连按两次 Esc；可以只回退代码、只回退对话，或者两个都回退"
+          }
+        ],
+        "codex": [
+          {
+            "kind": "command",
+            "text": "Esc",
+            "note": "看到方向不对立刻打断，再补一句纠正"
+          }
+        ]
+      },
+      "retest": "方向不对时会及时打断",
+      "problem": "跑偏不打断"
+    },
+    {
+      "id": "B5",
+      "section": "B",
+      "title": "长任务交给 /goal",
+      "weight": 0.5,
+      "applies_to": [
+        "claude_code",
+        "codex"
+      ],
+      "params": {
+        "continue_msgs": 5
+      },
+      "basis": {
+        "claude_code": {
+          "url": "https://code.claude.com/docs/en/goal",
+          "point": "设一个完成条件，评估器每轮检查，没达成就继续干"
+        },
+        "codex": {
+          "url": "https://developers.openai.com/codex/learn/best-practices",
+          "point": "长期目标可以交给 goal，不用一轮轮手动推"
+        }
+      },
+      "rx": {
+        "claude_code": [
+          {
+            "kind": "command",
+            "text": "/goal 所有测试通过，并且 npm run build 成功",
+            "note": "条件写成能检查的事"
+          }
+        ],
+        "codex": [
+          {
+            "kind": "command",
+            "text": "/goal 所有测试通过并且构建成功"
+          }
+        ]
+      },
+      "retest": "“继续”这类消息减少，或出现 /goal",
+      "problem": "长任务靠手动推"
+    },
+    {
+      "id": "B6",
+      "section": "B",
+      "title": "大需求先让它采访你",
+      "weight": 0.5,
+      "applies_to": [
+        "claude_code"
+      ],
+      "params": {},
+      "basis": {
+        "claude_code": {
+          "url": "https://code.claude.com/docs/en/best-practices#let-claude-interview-you",
+          "point": "大功能先让 Claude 用 AskUserQuestion 采访你，写成 SPEC 再开新会话实现"
+        }
+      },
+      "rx": {
+        "claude_code": [
+          {
+            "kind": "prompt",
+            "text": "我想做 [一句话需求]。用 AskUserQuestion 详细采访我：技术实现、界面、边界情况、取舍。问完写成 SPEC.md。"
+          }
+        ]
+      },
+      "retest": "出现 AskUserQuestion",
+      "problem": "大需求不先对齐"
+    },
+    {
+      "id": "B7",
+      "section": "B",
+      "title": "交付前做独立审查",
+      "weight": 1,
+      "applies_to": [
+        "claude_code",
+        "codex"
+      ],
+      "params": {},
+      "basis": {
+        "claude_code": {
+          "url": "https://code.claude.com/docs/en/best-practices#add-an-adversarial-review-step",
+          "point": "完成前让一个新上下文的子代理审查 diff，干活的不给自己打分"
+        },
+        "codex": {
+          "url": "https://developers.openai.com/codex/learn/best-practices",
+          "point": "接受结果前先审查"
+        }
+      },
+      "rx": {
+        "claude_code": [
+          {
+            "kind": "command",
+            "text": "/code-review",
+            "note": "在新的子代理里审查当前 diff"
+          }
+        ],
+        "codex": [
+          {
+            "kind": "command",
+            "text": "/review",
+            "note": "让 Codex 审查当前改动"
+          }
+        ]
+      },
+      "retest": "出现审查（/code-review、/review 或审查子代理）",
+      "problem": "交付前不审查"
+    },
+    {
+      "id": "C1",
+      "section": "C",
+      "title": "项目里有规则文件",
+      "weight": 1.5,
+      "applies_to": [
+        "claude_code",
+        "codex"
+      ],
+      "params": {
+        "good_pct": 50
+      },
+      "basis": {
+        "claude_code": {
+          "url": "https://code.claude.com/docs/en/best-practices#write-an-effective-claude-md",
+          "point": "用 /init 生成 CLAUDE.md，写它猜不到的命令、规范和坑"
+        },
+        "codex": {
+          "url": "https://developers.openai.com/codex/guides/agents-md",
+          "point": "AGENTS.md 写怎么跑项目、怎么测试、规矩和完成标准；/init 生成初稿"
+        }
+      },
+      "rx": {
+        "claude_code": [
+          {
+            "kind": "command",
+            "text": "/init",
+            "note": "在下面列出的“没有规则文件”的项目里各跑一次，再删掉它能从代码里看出来的内容"
+          }
+        ],
+        "codex": [
+          {
+            "kind": "command",
+            "text": "/init",
+            "note": "在列出的项目里生成 AGENTS.md 初稿，再精简"
+          }
+        ]
+      },
+      "retest": "常用项目里有规则文件的比例超过 50%",
+      "problem": "常用项目缺规则文件"
+    },
+    {
+      "id": "C2",
+      "section": "C",
+      "title": "规则文件不过长",
+      "weight": 1,
+      "applies_to": [
+        "claude_code",
+        "codex",
+        "cursor"
+      ],
+      "params": {
+        "claude_max_lines": 200,
+        "cursor_max_lines": 500
+      },
+      "basis": {
+        "claude_code": {
+          "url": "https://code.claude.com/docs/en/costs#move-instructions-from-claude-md-to-skills",
+          "point": "CLAUDE.md 尽量控制在 200 行以内，专门的流程挪进 Skill"
+        },
+        "codex": {
+          "url": "https://developers.openai.com/codex/guides/agents-md",
+          "point": "超过 project_doc_max_bytes 的部分会被截掉；短而准胜过长而泛"
+        },
+        "cursor": {
+          "url": "https://cursor.com/docs/context/rules",
+          "point": "单条规则控制在 500 行以内，拆成小而可组合的规则"
+        }
+      },
+      "rx": {
+        "claude_code": [
+          {
+            "kind": "command",
+            "text": "/doctor",
+            "note": "它会找出能从代码推导出来的内容，建议删掉或挪进 Skill"
+          }
+        ],
+        "codex": [
+          {
+            "kind": "prompt",
+            "text": "帮我精简 AGENTS.md：删掉能从代码看出来的内容，专门流程挪到 docs/ 里，只留指针。改之前先给我看 diff。"
+          }
+        ],
+        "cursor": [
+          {
+            "kind": "prompt",
+            "text": "把 .cursor/rules 里超过 500 行的规则拆成几条小规则，按文件类型设置 globs。"
+          }
+        ]
+      },
+      "retest": "最长的规则文件降到上限以内",
+      "problem": "规则文件太长"
+    },
+    {
+      "id": "C3",
+      "section": "C",
+      "title": "Skill 装了要用",
+      "weight": 1,
+      "applies_to": [
+        "claude_code",
+        "codex"
+      ],
+      "params": {
+        "many": 30,
+        "used_pct_bad": 20
+      },
+      "basis": {
+        "claude_code": {
+          "url": "https://code.claude.com/docs/en/skills",
+          "point": "列表里的每个 Skill 每轮都占上下文，不管用没用；从没调用过的先关掉"
+        },
+        "codex": {
+          "url": "https://developers.openai.com/codex/skills",
+          "point": "Skill 列表最多占上下文的 2%，装太多会被截短"
+        }
+      },
+      "rx": {
+        "claude_code": [
+          {
+            "kind": "command",
+            "text": "/skill-doctor",
+            "note": "列出每个 Skill 的上下文代价和调用次数，先关掉代价高又没用过的"
+          },
+          {
+            "kind": "config",
+            "text": "{\n  \"skillOverrides\": {\"某个不常用的skill\": \"user-invocable-only\"}\n}",
+            "note": "写进 ~/.claude/settings.json：保留手动调用，但不再每轮占上下文"
+          },
+          {
+            "kind": "action",
+            "text": "在 claude.ai 上关掉用不到的插件",
+            "note": "桌面 App 从账号同步的插件 Skill 不受 skillOverrides 控制；在账号里关掉后，桌面 App 会自动同步移除"
+          }
+        ],
+        "codex": [
+          {
+            "kind": "prompt",
+            "text": "列出 ~/.agents/skills 和 ~/.codex/skills 里所有 Skill，把我最近 30 天没用过的移到 ~/skills-archive/，移动前先给我看清单。"
+          }
+        ]
+      },
+      "retest": "装用比提高（装的少了，或用的多了）",
+      "problem": "Skill 装得多用得少"
+    },
+    {
+      "id": "C4",
+      "section": "C",
+      "title": "同一个 Skill 装了几份",
+      "weight": 0,
+      "applies_to": [
+        "_global"
+      ],
+      "params": {},
+      "basis": {
+        "_global": {
+          "url": "https://developers.openai.com/codex/skills",
+          "point": "Codex、OpenCode、pi 都读 ~/.agents/skills，可以作为共享目录"
+        }
+      },
+      "rx": {
+        "_global": [
+          {
+            "kind": "prompt",
+            "text": "找出在 ~/.claude/skills、~/.agents/skills、~/.codex/skills、~/.cursor/skills 里重复的 Skill，给我一个合并方案（保留一份、其他用软链接），先别动手。"
+          }
+        ]
+      },
+      "retest": "重复的 Skill 数下降",
+      "problem": "Skill 重复安装"
+    },
+    {
+      "id": "C5",
+      "section": "C",
+      "title": "MCP 配了要用",
+      "weight": 1,
+      "applies_to": [
+        "claude_code",
+        "codex",
+        "cursor"
+      ],
+      "params": {},
+      "basis": {
+        "claude_code": {
+          "url": "https://code.claude.com/docs/en/costs#reduce-mcp-server-overhead",
+          "point": "用 /mcp 关掉不用的服务器；能用 CLI 的优先用 CLI"
+        },
+        "codex": {
+          "url": "https://developers.openai.com/codex/learn/best-practices",
+          "point": "只接真正用得上的 MCP"
+        },
+        "cursor": {
+          "url": "https://cursor.com/docs/context/mcp",
+          "point": "只接真正用得上的 MCP"
+        }
+      },
+      "rx": {
+        "claude_code": [
+          {
+            "kind": "command",
+            "text": "/mcp",
+            "note": "把列表里没用过的服务器关掉"
+          }
+        ],
+        "codex": [
+          {
+            "kind": "config",
+            "text": "[mcp_servers.不用的服务器]\nenabled = false",
+            "note": "改 ~/.codex/config.toml"
+          }
+        ],
+        "cursor": [
+          {
+            "kind": "config",
+            "text": "从 ~/.cursor/mcp.json 删掉不用的条目"
+          }
+        ]
+      },
+      "retest": "配置了却没用过的 MCP 数降为 0",
+      "problem": "MCP 配了不用"
+    },
+    {
+      "id": "C6",
+      "section": "C",
+      "title": "权限别长期全放开",
+      "weight": 1,
+      "applies_to": [
+        "claude_code",
+        "codex"
+      ],
+      "params": {
+        "bad_pct": 50
+      },
+      "basis": {
+        "claude_code": {
+          "url": "https://code.claude.com/docs/en/best-practices#configure-permissions",
+          "point": "用白名单和沙箱减少打扰，或用 auto 模式让分类器把关，而不是跳过全部检查"
+        },
+        "codex": {
+          "url": "https://developers.openai.com/codex/concepts/sandboxing",
+          "point": "App 的权限菜单有 Ask for approval、Approve for me、Full access；Full access 可以不受限制地联网和改任何文件"
+        }
+      },
+      "rx": {
+        "claude_code": [
+          {
+            "kind": "command",
+            "text": "/fewer-permission-prompts",
+            "note": "从你的记录里找常用的只读命令，生成白名单，然后改回 auto 模式"
+          }
+        ],
+        "codex": [
+          {
+            "kind": "action",
+            "text": "Codex App 输入框旁的权限菜单 → Approve for me",
+            "note": "只在动作看起来不安全时才问你；真需要时再临时切 Full access"
+          },
+          {
+            "kind": "config",
+            "text": "approval_policy = \"on-request\"\nsandbox_mode = \"workspace-write\"",
+            "note": "CLI 用户写进 ~/.codex/config.toml"
+          }
+        ]
+      },
+      "retest": "完全放开的轮次占比降到 50% 以下",
+      "priority": 3,
+      "problem": "权限长期全开"
+    },
+    {
+      "id": "C7",
+      "section": "C",
+      "title": "必须每次都做的事交给 hooks",
+      "weight": 0.5,
+      "applies_to": [
+        "claude_code",
+        "codex"
+      ],
+      "params": {},
+      "basis": {
+        "claude_code": {
+          "url": "https://code.claude.com/docs/en/best-practices#set-up-hooks",
+          "point": "CLAUDE.md 是建议，hooks 是保证；每次都要发生的事用 hooks"
+        },
+        "codex": {
+          "url": "https://learn.chatgpt.com/docs/config-file/config-reference",
+          "point": "hooks 写在 config.toml 或 hooks.json"
+        }
+      },
+      "rx": {
+        "claude_code": [
+          {
+            "kind": "prompt",
+            "text": "帮我写一个 hook：每次改完文件自动跑 eslint（换成我项目的检查命令）。写进项目的 .claude/settings.json，先给我看。"
+          }
+        ],
+        "codex": [
+          {
+            "kind": "prompt",
+            "text": "帮我写一个 Codex hook：每轮结束时跑一次测试。写进 ~/.codex/hooks.json，先给我看。"
+          }
+        ]
+      },
+      "retest": "hooks 数量大于 0",
+      "problem": "没配 hooks"
+    },
+    {
+      "id": "C8",
+      "section": "C",
+      "title": "规则文件里没有密钥",
+      "weight": 1,
+      "applies_to": [
+        "claude_code",
+        "codex",
+        "cursor"
+      ],
+      "params": {},
+      "basis": {
+        "claude_code": {
+          "url": "https://code.claude.com/docs/en/claude-directory#plaintext-storage",
+          "point": "规则文件和记录都是明文，密钥放环境变量"
+        },
+        "codex": {
+          "url": "https://developers.openai.com/codex/guides/agents-md",
+          "point": "AGENTS.md 会被发给模型，不要放密钥"
+        },
+        "cursor": {
+          "url": "https://cursor.com/docs/context/rules",
+          "point": "规则会被发给模型，不要放密钥"
+        }
+      },
+      "rx": {
+        "claude_code": [
+          {
+            "kind": "prompt",
+            "text": "检查我的 CLAUDE.md 和 AGENTS.md 里有没有密钥或 token，有的话换成环境变量引用，并提醒我去作废旧的。"
+          }
+        ],
+        "codex": [
+          {
+            "kind": "prompt",
+            "text": "检查 AGENTS.md 里有没有密钥，换成环境变量引用，并提醒我作废旧的。"
+          }
+        ],
+        "cursor": [
+          {
+            "kind": "prompt",
+            "text": "检查 .cursor/rules 里有没有密钥，换成环境变量引用。"
+          }
+        ]
+      },
+      "retest": "命中数为 0",
+      "problem": "规则文件里有密钥"
+    },
+    {
+      "id": "D1",
+      "section": "D",
+      "title": "按任务挑模型",
+      "weight": 1,
+      "applies_to": [
+        "claude_code",
+        "codex"
+      ],
+      "params": {
+        "top_pct": 75
+      },
+      "basis": {
+        "claude_code": {
+          "url": "https://code.claude.com/docs/en/costs#choose-the-right-model",
+          "point": "大多数编码任务 Sonnet 就够，Opus 留给复杂的架构和多步推理"
+        },
+        "codex": {
+          "url": "https://developers.openai.com/codex/learn/best-practices",
+          "point": "范围清楚的小任务用低推理强度，复杂改动和调试再调高"
+        }
+      },
+      "rx": {
+        "claude_code": [
+          {
+            "kind": "command",
+            "text": "/model sonnet",
+            "note": "改文案、小修小补时切过去；子代理可以在定义里写 model: haiku"
+          }
+        ],
+        "codex": [
+          {
+            "kind": "config",
+            "text": "model_reasoning_effort = \"medium\"",
+            "note": "写进 ~/.codex/config.toml 作为默认，难题再临时调高"
+          }
+        ]
+      },
+      "retest": "最高档模型 / 高推理强度的占比降到 75% 以下",
+      "problem": "什么活都用最贵的"
+    },
+    {
+      "id": "D2",
+      "section": "D",
+      "title": "缓存命中率高",
+      "weight": 1,
+      "applies_to": [
+        "claude_code",
+        "codex"
+      ],
+      "params": {
+        "good_pct": 80
+      },
+      "basis": {
+        "claude_code": {
+          "url": "https://code.claude.com/docs/en/costs#why-usage-climbs-in-a-long-session",
+          "point": "频繁切模型、长时间离开再回来都会让缓存失效"
+        },
+        "codex": {
+          "url": "https://developers.openai.com/codex/learn/best-practices",
+          "point": "保持会话前缀稳定能复用缓存"
+        }
+      },
+      "rx": {
+        "claude_code": [
+          {
+            "kind": "prompt",
+            "text": "（习惯）一个会话里尽量别来回切模型；离开超过一小时再回来，考虑先 /compact 或开新会话。"
+          }
+        ],
+        "codex": [
+          {
+            "kind": "prompt",
+            "text": "（习惯）一个线程里别频繁换模型；隔天的任务开新线程。"
+          }
+        ]
+      },
+      "retest": "缓存命中率超过 80%",
+      "problem": "缓存命中率低"
+    },
+    {
+      "id": "D3",
+      "section": "D",
+      "title": "会并行开工",
+      "weight": 0.5,
+      "applies_to": [
+        "claude_code",
+        "codex"
+      ],
+      "params": {},
+      "basis": {
+        "claude_code": {
+          "url": "https://code.claude.com/docs/en/best-practices#run-multiple-claude-sessions",
+          "point": "用 worktree 或桌面 App 同时跑几个会话，写的和审的分开"
+        },
+        "codex": {
+          "url": "https://developers.openai.com/codex/learn/best-practices",
+          "point": "互不依赖的任务可以并行"
+        }
+      },
+      "rx": {
+        "claude_code": [
+          {
+            "kind": "command",
+            "text": "claude --worktree",
+            "note": "开一个隔离的副本跑第二个任务，互不干扰"
+          }
+        ],
+        "codex": [
+          {
+            "kind": "prompt",
+            "text": "（习惯）互不依赖的任务开两个线程同时跑，各自在独立 worktree 里改。"
+          }
+        ]
+      },
+      "retest": "出现同时进行的会话或 worktree",
+      "problem": "不会并行"
+    }
+  ],
+  "features": [
+    {
+      "key": "plan_sessions",
+      "label": "Plan 模式",
+      "unit": "个会话"
+    },
+    {
+      "key": "subagent_calls",
+      "label": "子代理",
+      "unit": "次"
+    },
+    {
+      "key": "clear",
+      "label": "/clear · /new",
+      "unit": "次"
+    },
+    {
+      "key": "compact_manual",
+      "label": "主动 /compact",
+      "unit": "次"
+    },
+    {
+      "key": "btw",
+      "label": "/btw",
+      "unit": "次",
+      "only": [
+        "claude_code"
+      ]
+    },
+    {
+      "key": "goal_sessions",
+      "label": "/goal",
+      "unit": "个会话"
+    },
+    {
+      "key": "rewind",
+      "label": "/rewind",
+      "unit": "次",
+      "only": [
+        "claude_code"
+      ]
+    },
+    {
+      "key": "review_sessions",
+      "label": "独立审查",
+      "unit": "个会话"
+    },
+    {
+      "key": "ask_user",
+      "label": "采访你（AskUserQuestion）",
+      "unit": "次",
+      "only": [
+        "claude_code"
+      ]
+    },
+    {
+      "key": "worktree_sessions",
+      "label": "worktree",
+      "unit": "个会话"
+    },
+    {
+      "key": "skill_calls",
+      "label": "Skill 调用",
+      "unit": "次"
+    },
+    {
+      "key": "mcp_calls",
+      "label": "MCP 调用",
+      "unit": "次"
+    }
+  ]
+}
