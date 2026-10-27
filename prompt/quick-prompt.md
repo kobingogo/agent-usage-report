@@ -4,7 +4,7 @@
 > 它会下载**固定版本**的统计脚本，并核对哈希，不让 Agent 现编统计逻辑。这样每个人数出来的数字口径一致。
 > 想长期用、要复测对比，请安装 Skill（见 README）。
 
-发布前，维护者把下面的 `<OWNER>`、`<VERSION>`、`<SHA256>` 换成真实值（README「发布」一节说明了怎么算）。
+发布前，维护者把下面的 `<SHA256>` 换成这个 tag 发布包的真实哈希（README「发布」一节说明了怎么算）。
 
 ---
 
@@ -15,14 +15,14 @@
 
 2. 下载固定版本的体检脚本并核对哈希：
    mkdir -p ~/.agent-usage-report/tool && cd ~/.agent-usage-report/tool
-   curl -fsSL -o aur.tar.gz https://github.com/<OWNER>/agent-usage-report/archive/refs/tags/<VERSION>.tar.gz
+   curl -fsSL -o aur.tar.gz https://github.com/kobingogo/agent-usage-report/archive/refs/tags/v0.1.0-beta.tar.gz
    核对 sha256 必须等于 <SHA256>（macOS 用 shasum -a 256 aur.tar.gz，Linux 用 sha256sum aur.tar.gz）。
    不一致就删掉文件、告诉我、停下。一致就解压：tar -xzf aur.tar.gz --strip-components=1
 
 3. 运行统计（只读本机记录，不联网，不改配置）：
    python3 ~/.agent-usage-report/tool/scripts/scan.py run
 
-4. 只读 ~/.agent-usage-report/latest/findings.json。不要打开 facts.json 以外的任何原始记录，也不要读 private.json。
+4. 只读 ~/.agent-usage-report/latest/findings.json（文件较大，用读文件工具读）。不要打开 facts.json、private.json 或任何原始会话记录。
 
 5. 按 ~/.agent-usage-report/tool/SKILL.md 第 4 步的格式，写 ~/.agent-usage-report/latest/narrative.json：
    一句话诊断、两三句总评、本周就改的三件事、一句分享卡金句。数字只能用 findings.json 里的；不写项目名和路径。
